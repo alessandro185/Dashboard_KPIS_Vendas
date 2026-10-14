@@ -5,3 +5,6 @@ __pycache__/
 .streamlit/
 .env
 .env.*
+
+.vercel
+.env*

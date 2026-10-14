@@ -3,7 +3,7 @@
 Dashboard interativo em Python + Streamlit para acompanhar KPIs de vendas. Os dados atuais são simulados, mas a estrutura está pronta para conectar uma API real.
 
 <!-- Adicione aqui um screenshot ou GIF: ![Dashboard](docs/screenshot.png) -->
-<!-- E o link do deploy: **Demo:** https://seu-app.streamlit.app -->
+**Demo Online (Vercel):** [https://dashboard-kpis-vendas.vercel.app](https://dashboard-kpis-vendas.vercel.app)
 
 ## Funcionalidades
 

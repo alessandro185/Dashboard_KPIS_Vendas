@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Dashboard de KPIs - Vendas</title>
+    <meta name="description" content="Dashboard interativo em Python e Streamlit para acompanhamento de KPIs de vendas." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body, html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #0e1117;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        overflow: hidden;
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+      #custom-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at 50% 40%, #161f30 0%, #0e1117 100%);
+        color: #f8fafc;
+        z-index: 99999;
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+      }
+      .spinner {
+        width: 52px;
+        height: 52px;
+        border: 4px solid rgba(255, 255, 255, 0.08);
+        border-top-color: #ff4b4b;
+        border-radius: 50%;
+        animation: spin 0.85s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+        margin-bottom: 22px;
+        box-shadow: 0 0 24px rgba(255, 75, 75, 0.25);
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .loader-title {
+        font-size: 1.35rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin-bottom: 8px;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      }
+      .loader-desc {
+        font-size: 0.92rem;
+        color: #94a3b8;
+        max-width: 440px;
+        text-align: center;
+        line-height: 1.55;
+        padding: 0 20px;
+      }
+      .loader-badge {
+        margin-top: 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        font-size: 0.78rem;
+        color: #cbd5e1;
+      }
+      .loaded #custom-loader {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="custom-loader">
+      <div class="spinner"></div>
+      <div class="loader-title">Carregando Dashboard de Vendas...</div>
+      <div class="loader-desc">Inicializando o ambiente Python (Pyodide) e carregando Streamlit via WebAssembly diretamente no seu navegador.</div>
+      <div class="loader-badge">⚡ Execução client-side WebAssembly</div>
+    </div>
+
+    <div id="root"></div>
+
+    <script type="module">
+      import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.js";
+
+      const appCode = "\"\"\"\napp.py\n------\nDashboard de KPIs de Vendas.\n\nPara rodar:\n    streamlit run app.py\n\"\"\"\n\nimport pandas as pd\nimport plotly.express as px\nimport streamlit as st\n\nfrom data_cleaning import limpar_dados\nfrom data_source import SalesAPIError, fetch_sales_data\n\nst.set_page_config(page_title=\"Dashboard de KPIs - Vendas\", layout=\"wide\", page_icon=\"\ud83d\udcca\")\n\n\n# ---------------------------------------------------------------------------\n# Cache: evita bater na API a cada intera\u00e7\u00e3o (filtro, etc).\n# S\u00f3 busca dados novos de fato a cada `ttl` segundos.\n# ---------------------------------------------------------------------------\n@st.cache_data(ttl=30, show_spinner=\"Buscando dados de vendas...\")\ndef carregar_dados(n: int, simular_falha: bool, seed: int | None) -> pd.DataFrame:\n    return fetch_sales_data(n=n, simular_duplicados=True, simular_falha=simular_falha, seed=seed)\n\n\n# ---------------------------------------------------------------------------\n# Sidebar - configura\u00e7\u00f5es\n# ---------------------------------------------------------------------------\nst.sidebar.title(\"\u2699\ufe0f Configura\u00e7\u00f5es\")\nqtd_registros = st.sidebar.slider(\"Qtd. de vendas simuladas\", 50, 1000, 300, step=50)\nusar_seed = st.sidebar.checkbox(\n    \"\ud83c\udfb2 Dados reproduz\u00edveis (seed fixa)\",\n    value=False,\n    help=\"Gera sempre o mesmo conjunto simulado. \u00datil para testar.\",\n)\nauto_refresh = st.sidebar.checkbox(\"\ud83d\udd04 Atualizar automaticamente\", value=False)\nintervalo = st.sidebar.slider(\n    \"Intervalo de atualiza\u00e7\u00e3o (segundos)\", 5, 60, 10, disabled=not auto_refresh\n)\nsimular_falha = st.sidebar.checkbox(\n    \"\u26a0\ufe0f Simular falha de API (teste)\",\n    value=False,\n    help=\"Ativa ~15% de chance da 'API' falhar, para testar o tratamento de erro.\",\n)\n\nif st.sidebar.button(\"\ud83d\udd01 Atualizar agora\"):\n    st.cache_data.clear()\n    st.rerun()\n\nst.sidebar.markdown(\"---\")\nst.sidebar.caption(\n    \"Os dados s\u00e3o simulados em `data_source.py`. \"\n    \"Troque `fetch_sales_data()` pela chamada \u00e0 sua API real quando estiver pronta.\"\n)\nst.sidebar.markdown(\"---\")\nst.sidebar.subheader(\"\ud83d\udd0d Filtros\")\n\n\ndef _multiselect(rotulo: str, chave: str, opcoes: list[str]) -> list[str]:\n    \"\"\"Multiselect que preserva a sele\u00e7\u00e3o do usu\u00e1rio entre atualiza\u00e7\u00f5es.\"\"\"\n    atual = st.session_state.get(chave)\n    if atual is None:\n        st.session_state[chave] = list(opcoes)\n    else:\n        st.session_state[chave] = [o for o in atual if o in opcoes]\n    return st.sidebar.multiselect(rotulo, opcoes, key=chave)\n\n\n# ---------------------------------------------------------------------------\n# Corpo do dashboard. \u00c9 um fragment: com auto-refresh ligado, s\u00f3 esta parte\n# \u00e9 reexecutada a cada `intervalo` segundos, sem bloquear a interface.\n# ---------------------------------------------------------------------------\n@st.fragment(run_every=intervalo if auto_refresh else None)\ndef dashboard() -> None:\n    # 1. Busca (com tratamento de erro)\n    try:\n        df_bruto = carregar_dados(qtd_registros, simular_falha, 42 if usar_seed else None)\n    except SalesAPIError as e:\n        st.error(f\"\ud83d\udeab N\u00e3o foi poss\u00edvel carregar os dados de vendas.\\n\\n**Detalhe:** {e}\")\n        st.info(\"Tente novamente em alguns segundos ou clique em '\ud83d\udd01 Atualizar agora'.\")\n        return\n    except Exception as e:\n        st.error(f\"\ud83d\udeab Erro inesperado ao carregar os dados: {e}\")\n        return\n\n    # 2. Limpeza\n    resultado = limpar_dados(df_bruto)\n    df = resultado[\"df\"]\n    relatorio = resultado[\"relatorio\"]\n\n    if df.empty:\n        st.warning(\"Nenhum dado dispon\u00edvel ap\u00f3s a limpeza.\")\n        return\n\n    # 3. Filtros\n    f_produtos = _multiselect(\"Produto\", \"f_produtos\", sorted(df[\"produto\"].unique()))\n    f_canais = _multiselect(\"Canal\", \"f_canais\", sorted(df[\"canal\"].unique()))\n    f_regioes = _multiselect(\"Regi\u00e3o\", \"f_regioes\", sorted(df[\"regiao\"].unique()))\n\n    data_min = df[\"data_venda\"].min().date()\n    data_max = df[\"data_venda\"].max().date()\n    periodo = st.session_state.get(\"f_periodo\")\n    if not (isinstance(periodo, tuple) and len(periodo) == 2):\n        periodo = (data_min, data_max)\n    # mant\u00e9m o per\u00edodo escolhido dentro dos limites dos dados atuais\n    st.session_state[\"f_periodo\"] = (max(periodo[0], data_min), min(periodo[1], data_max))\n    f_periodo = st.sidebar.date_input(\n        \"Per\u00edodo\", key=\"f_periodo\", min_value=data_min, max_value=data_max\n    )\n\n    df = df[\n        df[\"produto\"].isin(f_produtos)\n        & df[\"canal\"].isin(f_canais)\n        & df[\"regiao\"].isin(f_regioes)\n    ]\n    if isinstance(f_periodo, tuple) and len(f_periodo) == 2:\n        inicio, fim = f_periodo\n        df = df[(df[\"data_venda\"].dt.date >= inicio) & (df[\"data_venda\"].dt.date <= fim)]\n\n    # Cabe\u00e7alho\n    st.title(\"\ud83d\udcca Dashboard de KPIs - Vendas\")\n    st.caption(f\"\u00daltima atualiza\u00e7\u00e3o: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M:%S')}\")\n\n    with st.expander(\"\ud83e\uddf9 Relat\u00f3rio de limpeza de dados\"):\n        c1, c2, c3 = st.columns(3)\n        c1.metric(\"Registros recebidos\", relatorio[\"total_inicial\"])\n        c2.metric(\"Duplicados (exatos)\", relatorio[\"duplicados_exatos_removidos\"])\n        c3.metric(\"Duplicados (por ID)\", relatorio[\"duplicados_por_id_removidos\"])\n        c4, c5, c6 = st.columns(3)\n        c4.metric(\"Incompletos\", relatorio[\"linhas_incompletas_removidas\"])\n        c5.metric(\"Valores inv\u00e1lidos\", relatorio[\"valores_invalidos_removidos\"])\n        c6.metric(\"Registros v\u00e1lidos\", relatorio[\"total_final\"])\n\n    if df.empty:\n        st.warning(\"Nenhum dado encontrado para os filtros selecionados.\")\n        return\n\n    # 4. KPIs\n    k1, k2, k3, k4 = st.columns(4)\n    k1.metric(\"\ud83d\udcb0 Faturamento Total\", f\"R$ {df['valor_total'].sum():,.2f}\")\n    k2.metric(\"\ud83e\uddfe Vendas\", f\"{len(df)}\")\n    k3.metric(\"\ud83c\udfaf Ticket M\u00e9dio\", f\"R$ {df['valor_total'].mean():,.2f}\")\n    k4.metric(\"\ud83d\udce6 Itens Vendidos\", f\"{int(df['quantidade'].sum())}\")\n\n    st.markdown(\"---\")\n\n    # 5. Gr\u00e1ficos\n    col1, col2 = st.columns(2)\n    with col1:\n        por_produto = (\n            df.groupby(\"produto\")[\"valor_total\"].sum().sort_values(ascending=False).reset_index()\n        )\n        fig = px.bar(\n            por_produto, x=\"produto\", y=\"valor_total\", color=\"produto\",\n            title=\"Faturamento por Produto\",\n            labels={\"valor_total\": \"Faturamento (R$)\", \"produto\": \"Produto\"},\n        )\n        st.plotly_chart(fig, width=\"stretch\")\n\n    with col2:\n        por_canal = df.groupby(\"canal\")[\"valor_total\"].sum().reset_index()\n        fig = px.pie(\n            por_canal, names=\"canal\", values=\"valor_total\", hole=0.4,\n            title=\"Distribui\u00e7\u00e3o por Canal de Venda\",\n        )\n        st.plotly_chart(fig, width=\"stretch\")\n\n    col3, col4 = st.columns(2)\n    with col3:\n        por_regiao = (\n            df.groupby(\"regiao\")[\"valor_total\"].sum().sort_values(ascending=False).reset_index()\n        )\n        fig = px.bar(\n            por_regiao, x=\"regiao\", y=\"valor_total\", color=\"regiao\",\n            title=\"Faturamento por Regi\u00e3o\",\n            labels={\"valor_total\": \"Faturamento (R$)\", \"regiao\": \"Regi\u00e3o\"},\n        )\n        st.plotly_chart(fig, width=\"stretch\")\n\n    with col4:\n        por_hora = (\n            df.assign(hora=df[\"data_venda\"].dt.floor(\"h\"))\n            .groupby(\"hora\")[\"valor_total\"].sum().reset_index()\n        )\n        fig = px.line(\n            por_hora, x=\"hora\", y=\"valor_total\", markers=True,\n            title=\"Faturamento ao Longo do Tempo\",\n            labels={\"valor_total\": \"Faturamento (R$)\", \"hora\": \"Hora\"},\n        )\n        st.plotly_chart(fig, width=\"stretch\")\n\n    # 6. Tabela detalhada\n    with st.expander(\"\ud83d\udccb Ver dados detalhados\"):\n        st.dataframe(df.sort_values(\"data_venda\", ascending=False), width=\"stretch\")\n\n\ndashboard()\n";
+      const cleaningCode = "\"\"\"\ndata_cleaning.py\n----------------\nFun\u00e7\u00f5es de limpeza e padroniza\u00e7\u00e3o dos dados de vendas vindos da API.\n\"\"\"\n\nimport pandas as pd\n\n\ndef limpar_dados(df: pd.DataFrame) -> dict:\n    \"\"\"\n    Limpa o DataFrame de vendas e retorna o df limpo + um relat\u00f3rio\n    do que foi feito (\u00fatil para mostrar no dashboard).\n\n    Etapas:\n      1. Converte tipos (datas e n\u00fameros).\n      2. Remove duplicados exatos.\n      3. Remove duplicados por id_venda (mesma venda reenviada pela API).\n      4. Remove linhas com campos essenciais nulos ou inv\u00e1lidos.\n      5. Remove valores inv\u00e1lidos (quantidade ou valor <= 0).\n      6. Cria a coluna 'valor_total' (quantidade x valor_unitario).\n    \"\"\"\n    total_inicial = len(df)\n    relatorio = {\n        \"duplicados_exatos_removidos\": 0,\n        \"duplicados_por_id_removidos\": 0,\n        \"linhas_incompletas_removidas\": 0,\n        \"valores_invalidos_removidos\": 0,\n    }\n\n    df = df.copy()\n\n    # 1. Tipos corretos (antes de comparar duplicados e nulos)\n    if \"data_venda\" in df.columns:\n        df[\"data_venda\"] = pd.to_datetime(df[\"data_venda\"], errors=\"coerce\")\n    for col in (\"quantidade\", \"valor_unitario\"):\n        if col in df.columns:\n            df[col] = pd.to_numeric(df[col], errors=\"coerce\")\n\n    # 2. Duplicados exatos\n    antes = len(df)\n    df = df.drop_duplicates()\n    relatorio[\"duplicados_exatos_removidos\"] = antes - len(df)\n\n    # 3. Duplicados por id_venda (mant\u00e9m a primeira ocorr\u00eancia)\n    if \"id_venda\" in df.columns:\n        antes = len(df)\n        df = df.drop_duplicates(subset=\"id_venda\", keep=\"first\")\n        relatorio[\"duplicados_por_id_removidos\"] = antes - len(df)\n\n    # 4. Campos essenciais ausentes (inclui valores que n\u00e3o puderam ser convertidos)\n    essenciais = [\n        c for c in [\"produto\", \"valor_unitario\", \"quantidade\", \"data_venda\"] if c in df.columns\n    ]\n    antes = len(df)\n    df = df.dropna(subset=essenciais)\n    relatorio[\"linhas_incompletas_removidas\"] = antes - len(df)\n\n    # 5. Valores inv\u00e1lidos\n    antes = len(df)\n    if \"quantidade\" in df.columns:\n        df = df[df[\"quantidade\"] > 0]\n    if \"valor_unitario\" in df.columns:\n        df = df[df[\"valor_unitario\"] > 0]\n    relatorio[\"valores_invalidos_removidos\"] = antes - len(df)\n\n    # 6. Coluna derivada\n    if {\"quantidade\", \"valor_unitario\"}.issubset(df.columns):\n        df[\"valor_total\"] = df[\"quantidade\"] * df[\"valor_unitario\"]\n\n    relatorio[\"total_inicial\"] = total_inicial\n    relatorio[\"total_final\"] = len(df)\n    relatorio[\"total_removido\"] = total_inicial - len(df)\n\n    return {\"df\": df.reset_index(drop=True), \"relatorio\": relatorio}\n";
+      const sourceCode = "\"\"\"\ndata_source.py\n--------------\nRespons\u00e1vel por buscar os dados de vendas.\n\nHoje gera dados simulados (mock) para testar o dashboard sem depender de\numa API real. Para usar uma API de verdade, troque o corpo de\n`fetch_sales_data()` (exemplo comentado na fun\u00e7\u00e3o).\n\"\"\"\n\nimport random\nfrom datetime import datetime, timedelta\n\nimport pandas as pd\n\n\nclass SalesAPIError(Exception):\n    \"\"\"Erro ao buscar dados da API de vendas (timeout, indisponibilidade, etc).\"\"\"\n\n\nPRODUTOS = [\"Camiseta\", \"T\u00eanis\", \"Bon\u00e9\", \"Mochila\", \"Jaqueta\", \"Meia\"]\nCANAIS = [\"Site\", \"App\", \"Loja F\u00edsica\", \"Marketplace\"]\nREGIOES = [\"Nordeste\", \"Sudeste\", \"Sul\", \"Centro-Oeste\", \"Norte\"]\n\n\ndef _gerar_venda_falsa(id_base: int, rng: random.Random) -> dict:\n    momento = datetime.now() - timedelta(minutes=rng.randint(0, 600))\n    return {\n        \"id_venda\": id_base,\n        \"produto\": rng.choice(PRODUTOS),\n        \"canal\": rng.choice(CANAIS),\n        \"regiao\": rng.choice(REGIOES),\n        \"quantidade\": rng.randint(1, 5),\n        \"valor_unitario\": round(rng.uniform(20, 350), 2),\n        \"data_venda\": momento,\n    }\n\n\ndef fetch_sales_data(\n    n: int = 300,\n    simular_duplicados: bool = True,\n    simular_falha: bool = False,\n    seed: int | None = None,\n) -> pd.DataFrame:\n    \"\"\"\n    Busca os dados de vendas.\n\n    MODO ATUAL: gera dados simulados em mem\u00f3ria.\n\n    MODO REAL (exemplo): troque o corpo da fun\u00e7\u00e3o por algo assim:\n\n        import os\n        import requests\n\n        try:\n            resp = requests.get(\n                \"https://sua-api.com/vendas\",\n                headers={\"Authorization\": f\"Bearer {os.environ['SALES_API_TOKEN']}\"},\n                timeout=10,\n            )\n            resp.raise_for_status()\n        except requests.exceptions.Timeout:\n            raise SalesAPIError(\"A API de vendas demorou demais para responder.\")\n        except requests.exceptions.ConnectionError:\n            raise SalesAPIError(\"N\u00e3o foi poss\u00edvel conectar \u00e0 API de vendas.\")\n        except requests.exceptions.HTTPError as e:\n            raise SalesAPIError(f\"API de vendas retornou erro: {e}\")\n\n        return pd.DataFrame(resp.json())\n\n    Args:\n        n: quantidade de registros simulados a gerar.\n        simular_duplicados: injeta dois tipos de duplicata para exercitar a\n            limpeza: c\u00f3pias exatas e reenvios com o mesmo id_venda, mas\n            data ligeiramente diferente (como uma API que reenvia o registro).\n        simular_falha: ~15% de chance de simular falha de API.\n        seed: fixa a aleatoriedade (\u00fatil para testes reproduz\u00edveis).\n\n    Raises:\n        SalesAPIError: quando a \"API\" (simulada ou real) falha.\n    \"\"\"\n    rng = random.Random(seed)\n\n    if simular_falha and rng.random() < 0.15:\n        raise SalesAPIError(\"Falha simulada: a API de vendas n\u00e3o respondeu a tempo.\")\n\n    registros = [_gerar_venda_falsa(i, rng) for i in range(1, n + 1)]\n\n    if simular_duplicados:\n        k = max(1, n // 25)\n        amostra = rng.sample(registros, k=2 * k)\n\n        # 1) c\u00f3pias exatas\n        registros.extend(dict(r) for r in amostra[:k])\n\n        # 2) reenvios: mesmo id_venda, data_venda ligeiramente diferente\n        for r in amostra[k:]:\n            reenvio = dict(r)\n            reenvio[\"data_venda\"] = r[\"data_venda\"] + timedelta(seconds=rng.randint(1, 90))\n            registros.append(reenvio)\n\n    return pd.DataFrame(registros)\n";
+
+      const root = document.getElementById("root");
+
+      // Oculta o loader customizado quando o Streamlit renderizar o primeiro elemento
+      const observer = new MutationObserver((mutations, obs) => {
+        if (root.children.length > 0) {
+          document.body.classList.add("loaded");
+          obs.disconnect();
+        }
+      });
+      observer.observe(root, { childList: true, subtree: true });
+
+      try {
+        mount({
+          entrypoint: "app.py",
+          files: {
+            "app.py": appCode,
+            "data_cleaning.py": cleaningCode,
+            "data_source.py": sourceCode
+          },
+          requirements: ["pandas", "plotly"]
+        }, root);
+
+        // Fallback para esconder a tela de loading após tempo limite
+        setTimeout(() => {
+          document.body.classList.add("loaded");
+        }, 25000);
+      } catch (err) {
+        console.error("Erro ao iniciar stlite:", err);
+        const title = document.querySelector(".loader-title");
+        const desc = document.querySelector(".loader-desc");
+        if (title) title.textContent = "Erro ao iniciar aplicação";
+        if (desc) desc.textContent = err.message || String(err);
+      }
+    </script>
+  </body>
+</html>
