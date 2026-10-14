@@ -1,6 +1,6 @@
 """
 data_cleaning.py
------------------
+----------------
 Funções de limpeza e padronização dos dados de vendas vindos da API.
 """
 
@@ -13,45 +13,58 @@ def limpar_dados(df: pd.DataFrame) -> dict:
     do que foi feito (útil para mostrar no dashboard).
 
     Etapas:
-      1. Remove duplicados exatos (mesma linha repetida).
-      2. Remove duplicados por id_venda (mesma venda reenviada pela API).
-      3. Remove linhas com campos essenciais nulos.
-      4. Garante tipos corretos (datas, números).
-      5. Cria coluna 'valor_total' (quantidade x valor_unitario).
+      1. Converte tipos (datas e números).
+      2. Remove duplicados exatos.
+      3. Remove duplicados por id_venda (mesma venda reenviada pela API).
+      4. Remove linhas com campos essenciais nulos ou inválidos.
+      5. Remove valores inválidos (quantidade ou valor <= 0).
+      6. Cria a coluna 'valor_total' (quantidade x valor_unitario).
     """
-    relatorio = {}
     total_inicial = len(df)
+    relatorio = {
+        "duplicados_exatos_removidos": 0,
+        "duplicados_por_id_removidos": 0,
+        "linhas_incompletas_removidas": 0,
+        "valores_invalidos_removidos": 0,
+    }
 
     df = df.copy()
 
-    # 1. Duplicados exatos
+    # 1. Tipos corretos (antes de comparar duplicados e nulos)
+    if "data_venda" in df.columns:
+        df["data_venda"] = pd.to_datetime(df["data_venda"], errors="coerce")
+    for col in ("quantidade", "valor_unitario"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # 2. Duplicados exatos
     antes = len(df)
     df = df.drop_duplicates()
     relatorio["duplicados_exatos_removidos"] = antes - len(df)
 
-    # 2. Duplicados por id_venda (mantém a primeira ocorrência)
+    # 3. Duplicados por id_venda (mantém a primeira ocorrência)
     if "id_venda" in df.columns:
         antes = len(df)
         df = df.drop_duplicates(subset="id_venda", keep="first")
         relatorio["duplicados_por_id_removidos"] = antes - len(df)
 
-    # 3. Remove linhas com campos essenciais ausentes
-    campos_essenciais = [c for c in ["produto", "valor_unitario", "quantidade", "data_venda"] if c in df.columns]
+    # 4. Campos essenciais ausentes (inclui valores que não puderam ser convertidos)
+    essenciais = [
+        c for c in ["produto", "valor_unitario", "quantidade", "data_venda"] if c in df.columns
+    ]
     antes = len(df)
-    df = df.dropna(subset=campos_essenciais)
+    df = df.dropna(subset=essenciais)
     relatorio["linhas_incompletas_removidas"] = antes - len(df)
 
-    # 4. Tipos corretos
-    if "data_venda" in df.columns:
-        df["data_venda"] = pd.to_datetime(df["data_venda"], errors="coerce")
+    # 5. Valores inválidos
+    antes = len(df)
     if "quantidade" in df.columns:
-        df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce")
+        df = df[df["quantidade"] > 0]
     if "valor_unitario" in df.columns:
-        df["valor_unitario"] = pd.to_numeric(df["valor_unitario"], errors="coerce")
+        df = df[df["valor_unitario"] > 0]
+    relatorio["valores_invalidos_removidos"] = antes - len(df)
 
-    df = df.dropna(subset=campos_essenciais)
-
-    # 5. Coluna derivada
+    # 6. Coluna derivada
     if {"quantidade", "valor_unitario"}.issubset(df.columns):
         df["valor_total"] = df["quantidade"] * df["valor_unitario"]
 
